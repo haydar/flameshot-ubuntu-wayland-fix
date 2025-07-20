@@ -1,8 +1,5 @@
 #!/bin/bash
 
-# Author: Haydar ŞAHİN
-# Description: Installs Flameshot and binds it to the Print key under Wayland on Ubuntu 24.04+.
-# OS Support: Ubuntu 24.04+ (GNOME with Wayland)
 
 set -e
 
@@ -18,9 +15,26 @@ if dpkg --compare-versions "$VERSION" lt 24.04; then
     exit 1
 fi
 
-echo "[+] Installing Flameshot..."
-sudo apt update
-sudo apt install -y flameshot
+# --- Remove Snap version if it exists ---
+echo "[+] Checking for and removing Flameshot Snap version (if present)..."
+if snap list | grep -q "flameshot"; then
+    echo "    Flameshot Snap version found. Uninstalling..."
+    sudo snap remove flameshot || { echo "❌ Failed to remove Flameshot Snap. Please remove it manually and try again." && exit 1; }
+    echo "    Flameshot Snap removed successfully."
+else
+    echo "    Flameshot Snap version not found. Skipping removal."
+fi
+
+# --- Install APT version ---
+echo "[+] Installing Flameshot via APT..."
+# Check if Flameshot is already installed via APT and up to date
+if ! apt list --installed flameshot 2>/dev/null | grep -q "flameshot" || ! dpkg -s flameshot | grep -q "Version: 12.1.0-2build2"; then
+    sudo apt update
+    sudo apt install -y flameshot
+else
+    echo "Flameshot is already the newest version (12.1.0-2build2) via APT. Skipping installation."
+fi
+
 
 SHORTCUT_NAME="flameshot"
 SHORTCUT_CMD='sh -c -- "QT_QPA_PLATFORM=wayland flameshot gui"'
@@ -34,6 +48,7 @@ echo "[+] Configuring GNOME custom shortcut..."
 BINDING_PATH=""
 for i in $(seq 0 99); do # Check up to custom99
     TEMP_BINDING_PATH="/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom$i/"
+    # Check if this specific custom binding path is already in use by any custom shortcut
     if ! gsettings get org.gnome.settings-daemon.plugins.media-keys custom-keybindings | grep -q "$TEMP_BINDING_PATH"; then
         BINDING_PATH="$TEMP_BINDING_PATH"
         break
@@ -50,7 +65,8 @@ if [[ "$CURRENT_BINDINGS" == "@as []" ]]; then
     NEW_BINDINGS="['$BINDING_PATH']"
 else
     # Remove the trailing ']' and append the new path, then add ']' back
-    NEW_BINDINGS="${CURRENT_BINDINGS::-1}, '$BINDING_PATH']"
+    # Using '#' as a delimiter for sed to avoid issues with '/' in BINDING_PATH
+    NEW_BINDINGS=$(echo "$CURRENT_BINDINGS" | sed "s#]$#, '$BINDING_PATH']#")
 fi
 gsettings set org.gnome.settings-daemon.plugins.media-keys custom-keybindings "$NEW_BINDINGS"
 
