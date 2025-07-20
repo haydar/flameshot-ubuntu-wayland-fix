@@ -60,7 +60,11 @@ echo "    GNOME's default Print Screen keybinding disabled."
 echo "--- Configuring GNOME custom shortcut ---"
 
 SHORTCUT_NAME="flameshot"
+# This is the full command string to be set in gsettings (including outer single quotes).
 SHORTCUT_CMD='sh -c -- "QT_QPA_PLATFORM=wayland flameshot gui"'
+# This is the "raw" command string for comparison, without the outer quotes,
+# as gsettings might return it stripped.
+SHORTCUT_CMD_RAW='sh -c -- "QT_QPA_PLATFORM=wayland flameshot gui"'
 SHORTCUT_KEY="Print"
 
 # 1. Check if Flameshot shortcut already exists
@@ -69,23 +73,35 @@ FLAMESHOT_SHORTCUT_EXISTS=false
 CURRENT_BINDINGS=$(gsettings get org.gnome.settings-daemon.plugins.media-keys custom-keybindings 2>/dev/null)
 
 if [[ "$CURRENT_BINDINGS" != "@as []" ]]; then
-    # Parse the array-like string to get individual paths (e.g., 'custom0', 'custom1')
-    # Remove '[' and ']' and single quotes, then split by commas
+    # Parse the array-like string (e.g., 'custom0', 'custom1') to individual paths.
+    # Remove '[', ']' and single quotes, then split by commas.
     IFS=',' read -ra BINDING_FRAGMENTS <<< "${CURRENT_BINDINGS//[\[\]\'[:space:]]/}"
 
     for fragment in "${BINDING_FRAGMENTS[@]}"; do
-        # Reconstruct full path for gsettings query
-        # Remove any empty strings from fragments due to multiple delimiters
+        # Remove any empty strings from fragments that might occur due to multiple delimiters
         if [ -n "$fragment" ]; then
+            # Reconstruct the full path for gsettings query
             FULL_PATH="/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/${fragment}/"
-            # Check if the command for this custom binding matches Flameshot's command
-            if gsettings get org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:"$FULL_PATH" command 2>/dev/null | grep -q "$SHORTCUT_CMD"; then
+            
+            # Retrieve the command for this custom binding
+            RETRIEVED_CMD=$(gsettings get org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:"$FULL_PATH" command 2>/dev/null)
+            
+            # Strip leading/trailing single quotes from the retrieved command, if present
+            RETRIEVED_CMD_STRIPPED=$(echo "$RETRIEVED_CMD" | sed "s/^'//;s/'$//")
+
+            # Compare the stripped retrieved command with our raw command string
+            if [[ "$RETRIEVED_CMD_STRIPPED" == "$SHORTCUT_CMD_RAW" ]]; then
                 echo "    Flameshot shortcut already found at: $FULL_PATH. Skipping creation."
                 FLAMESHOT_SHORTCUT_EXISTS=true
                 break
             fi
         fi
     done
+fi
+
+if [ "$FLAMESHOT_SHORTCUT_EXISTS" = true ]; then
+    echo "    Flameshot shortcut is already configured. No changes needed. Exiting."
+    exit 0
 fi
 
 if [ "$FLAMESHOT_SHORTCUT_EXISTS" = false ]; then
