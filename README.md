@@ -24,4 +24,4 @@ This script directly addresses this issue by:
 To install Flameshot and configure the shortcut, simply paste this command into your terminal:
 
 ```bash
-bash <(curl -s [https://raw.githubusercontent.com/haydar/flameshot-ubuntu-wayland-fix/refs/heads/main/flameshot-install.sh](https://raw.githubusercontent.com/haydar/flameshot-ubuntu-wayland-fix/refs/heads/main/flameshot-install.sh))
+ bash <(curl -s https://raw.githubusercontent.com/haydar/flameshot-ubuntu-wayland-fix/refs/heads/main/flameshot-install.sh)
