@@ -35,58 +35,95 @@ fi
 
 # --- Install APT version ---
 echo "--- Installing Flameshot via APT ---"
-# Check if Flameshot is already installed via APT and up to date
-# This check might need adjustment for future Ubuntu releases if the version changes.
-if ! apt list --installed flameshot 2>/dev/null | grep -q "flameshot" || ! dpkg -s flameshot | grep -q "Version: 12.1.0-2build2"; then
-    echo "    Flameshot APT version not found or not the newest. Updating apt and installing..."
+# Check if Flameshot is already installed via APT
+if dpkg -s flameshot &>/dev/null; then
+    echo "    Flameshot is already installed via APT. Ensuring it's the latest version..."
     sudo apt update
     sudo apt install -y flameshot
-    echo "    Flameshot APT installed/updated successfully."
+    echo "    Flameshot APT confirmed to be up to date."
 else
-    echo "    Flameshot is already installed. Skipping installation."
+    echo "    Flameshot is not installed via APT. Installing now..."
+    sudo apt update
+    sudo apt install -y flameshot
+    echo "    Flameshot APT installed successfully."
 fi
 
+# --- Disable GNOME's default Print Screen shortcut ---
+echo "--- Disabling GNOME's default Print Screen shortcut ---"
+# This command unbinds the 'Print' key from GNOME's default screenshot tool.
+# 'org.gnome.shell.keybindings' is where default GNOME Shell keybindings are set.
+# 'screenshot' is the keybinding for the full screen screenshot.
+gsettings set org.gnome.shell.keybindings screenshot "[]"
+echo "    GNOME's default Print Screen keybinding disabled."
+
+# --- Configuring GNOME custom shortcut ---
+echo "--- Configuring GNOME custom shortcut ---"
 
 SHORTCUT_NAME="flameshot"
 SHORTCUT_CMD='sh -c -- "QT_QPA_PLATFORM=wayland flameshot gui"'
 SHORTCUT_KEY="Print"
 
-echo "--- Configuring GNOME custom shortcut ---"
+# 1. Check if Flameshot shortcut already exists
+echo "    Checking if Flameshot shortcut already exists in custom keybindings..."
+FLAMESHOT_SHORTCUT_EXISTS=false
+CURRENT_BINDINGS=$(gsettings get org.gnome.settings-daemon.plugins.media-keys custom-keybindings 2>/dev/null)
 
-# Find the next available custom binding slot to avoid overwriting existing shortcuts.
-BINDING_PATH=""
-for i in $(seq 0 99); do # Check up to custom99 slots
-    TEMP_BINDING_PATH="/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom$i/"
-    # Check if this specific custom binding path is already in use by any custom shortcut
-    if ! gsettings get org.gnome.settings-daemon.plugins.media-keys custom-keybindings 2>/dev/null | grep -q "$TEMP_BINDING_PATH"; then
-        BINDING_PATH="$TEMP_BINDING_PATH"
-        break
+if [[ "$CURRENT_BINDINGS" != "@as []" ]]; then
+    # Parse the array-like string to get individual paths (e.g., 'custom0', 'custom1')
+    # Remove '[' and ']' and single quotes, then split by commas
+    IFS=',' read -ra BINDING_FRAGMENTS <<< "${CURRENT_BINDINGS//[\[\]\'[:space:]]/}"
+
+    for fragment in "${BINDING_FRAGMENTS[@]}"; do
+        # Reconstruct full path for gsettings query
+        # Remove any empty strings from fragments due to multiple delimiters
+        if [ -n "$fragment" ]; then
+            FULL_PATH="/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/${fragment}/"
+            # Check if the command for this custom binding matches Flameshot's command
+            if gsettings get org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:"$FULL_PATH" command 2>/dev/null | grep -q "$SHORTCUT_CMD"; then
+                echo "    Flameshot shortcut already found at: $FULL_PATH. Skipping creation."
+                FLAMESHOT_SHORTCUT_EXISTS=true
+                break
+            fi
+        fi
+    done
+fi
+
+if [ "$FLAMESHOT_SHORTCUT_EXISTS" = false ]; then
+    # 2. If not, find the next available custom binding slot
+    BINDING_PATH=""
+    for i in $(seq 0 99); do # Check up to custom99 slots
+        TEMP_BINDING_PATH="/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom$i/"
+        # Check if this specific custom binding path is already in use by any custom shortcut
+        if ! gsettings get org.gnome.settings-daemon.plugins.media-keys custom-keybindings 2>/dev/null | grep -q "$TEMP_BINDING_PATH"; then
+            BINDING_PATH="$TEMP_BINDING_PATH"
+            break
+        fi
+    done
+
+    if [ -z "$BINDING_PATH" ]; then
+        echo "❌ Could not find an available slot for a new custom shortcut. Please check your existing shortcuts. Exiting."
+        exit 1
     fi
-done
+    echo "    Using custom binding path: $BINDING_PATH"
 
-if [ -z "$BINDING_PATH" ]; then
-    echo "❌ Could not find an available slot for a new custom shortcut. Please check your existing shortcuts. Exiting."
-    exit 1
-fi
-echo "    Using custom binding path: $BINDING_PATH"
+    # 3. Add the new custom binding path to the list
+    if [[ "$CURRENT_BINDINGS" == "@as []" ]]; then
+        NEW_BINDINGS="['$BINDING_PATH']"
+    else
+        # Remove the trailing ']' and append the new path, then add ']' back
+        NEW_BINDINGS="${CURRENT_BINDINGS::-1}, '$BINDING_PATH']"
+    fi
+    gsettings set org.gnome.settings-daemon.plugins.media-keys custom-keybindings "$NEW_BINDINGS"
+    echo "    Added '$BINDING_PATH' to custom keybindings list."
 
-CURRENT_BINDINGS=$(gsettings get org.gnome.settings-daemon.plugins.media-keys custom-keybindings)
-if [[ "$CURRENT_BINDINGS" == "@as []" ]]; then
-    # If no custom bindings exist, start a new array
-    NEW_BINDINGS="['$BINDING_PATH']"
+    # 4. Set the properties for the new custom keybinding
+    gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:"$BINDING_PATH" name "$SHORTCUT_NAME"
+    gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:"$BINDING_PATH" command "$SHORTCUT_CMD"
+    gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:"$BINDING_PATH" binding "$SHORTCUT_KEY"
+    echo "    Set name, command, and binding for '$BINDING_PATH'."
 else
-    # Remove the trailing ']' and append the new path, then add ']' back
-    # This is a robust way to append to the GSettings array-like string
-    NEW_BINDINGS="${CURRENT_BINDINGS::-1}, '$BINDING_PATH']"
+    echo "    Flameshot shortcut already configured. Skipping shortcut creation."
 fi
-gsettings set org.gnome.settings-daemon.plugins.media-keys custom-keybindings "$NEW_BINDINGS"
-echo "    Added '$BINDING_PATH' to custom keybindings list."
-
-# Set the properties for the the new custom keybinding
-gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:"$BINDING_PATH" name "$SHORTCUT_NAME"
-gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:"$BINDING_PATH" command "$SHORTCUT_CMD"
-gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:"$BINDING_PATH" binding "$SHORTCUT_KEY"
-echo "    Set name, command, and binding for '$BINDING_PATH'."
 
 echo "[✓] Done! Flameshot is now bound to the Print key under Wayland."
 echo "    You might need to log out and log back in for the changes to take full effect."
