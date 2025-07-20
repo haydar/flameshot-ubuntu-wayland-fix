@@ -25,4 +25,4 @@ References:
 Paste this into your terminal:
 
 ```bash
-bash <(curl -s https://raw.githubusercontent.com/haydar/flameshot-shortcut/main/flameshot-install.sh)
+bash <(curl -s https://raw.githubusercontent.com/haydar/flameshot-ubuntu-wayland-fix/refs/heads/main/flameshot-install.sh)
