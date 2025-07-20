@@ -36,7 +36,6 @@ fi
 # --- Install APT version ---
 echo "--- Installing Flameshot via APT ---"
 # Check if Flameshot is already installed via APT and up to date
-# Note: The version '12.1.0-2build2' is specific to Ubuntu 24.04 at the time of writing.
 # This check might need adjustment for future Ubuntu releases if the version changes.
 if ! apt list --installed flameshot 2>/dev/null | grep -q "flameshot" || ! dpkg -s flameshot | grep -q "Version: 12.1.0-2build2"; then
     echo "    Flameshot APT version not found or not the newest. Updating apt and installing..."
@@ -44,7 +43,7 @@ if ! apt list --installed flameshot 2>/dev/null | grep -q "flameshot" || ! dpkg 
     sudo apt install -y flameshot
     echo "    Flameshot APT installed/updated successfully."
 else
-    echo "    Flameshot is already the newest version (12.1.0-2build2) via APT. Skipping installation."
+    echo "    Flameshot is already installed. Skipping installation."
 fi
 
 
