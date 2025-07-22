@@ -21,7 +21,9 @@ This script directly addresses this issue by:
 
 ## ⚙️ Quick Setup
 
-To install Flameshot and configure the shortcut, simply paste this command into your terminal:
-
+To install Flameshot and configure the shortcut, simply paste this command into your terminal. It will first ensure `curl` is installed and then run the installer.
 ```bash
- bash <(curl -s https://raw.githubusercontent.com/haydar/flameshot-ubuntu-wayland-fix/refs/heads/main/flameshot-install.sh)
+sudo apt-get install -y curl && \
+curl -fsSL https://raw.githubusercontent.com/haydar/flameshot-ubuntu-wayland-fix/main/flameshot-install.sh | bash
+
+```
